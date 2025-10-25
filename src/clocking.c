@@ -33,7 +33,7 @@ static void __no_inline_not_in_flash_func(set_qmi_timing)() {
 #endif
 
 #ifndef RP2350_PSRAM_RX_DELAY_FS
-#define RP2350_PSRAM_RX_DELAY_FS (3333333)
+#define RP2350_PSRAM_RX_DELAY_FS (3333333*2)
 #endif
 
 #ifndef RP2350_PSRAM_MAX_SCK_HZ
@@ -79,7 +79,7 @@ static void __no_inline_not_in_flash_func(set_psram_timing)(void) {
     qmi_hw->m[1].timing = QMI_M1_TIMING_PAGEBREAK_VALUE_1024 << QMI_M1_TIMING_PAGEBREAK_LSB | // Break between pages.
                           3 << QMI_M1_TIMING_SELECT_HOLD_LSB | // Delay releasing CS for 3 extra system cycles.
                           rxDelay << QMI_M1_TIMING_RXDELAY_LSB | // Delay between SCK and RX sampling
-                          1 << QMI_M1_TIMING_COOLDOWN_LSB | 1 << QMI_M1_TIMING_RXDELAY_LSB |
+                          1 << QMI_M1_TIMING_COOLDOWN_LSB |
                           maxSelect << QMI_M1_TIMING_MAX_SELECT_LSB | minDeselect << QMI_M1_TIMING_MIN_DESELECT_LSB |
                           clockDivider << QMI_M1_TIMING_CLKDIV_LSB;
 
@@ -94,7 +94,8 @@ static void __no_inline_not_in_flash_func(clock_init)(int sys_clk_div) {
     hw_write_masked(&qmi_hw->m[0].timing, 6, QMI_M0_TIMING_CLKDIV_BITS);
 
     // We're going to go fast, boost the voltage a little
-    vreg_set_voltage(VREG_VOLTAGE_1_15);
+    if (sys_clk_div != CLK_SYS_132MHZ) 
+        vreg_set_voltage(VREG_VOLTAGE_1_20);
 
     // Force a read through XIP to ensure the timing is applied before raising the clock rate
     volatile uint32_t* ptr = (volatile uint32_t*)0x14000000;

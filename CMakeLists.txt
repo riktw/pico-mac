@@ -58,7 +58,6 @@ set(HSTX_D2P 19 CACHE STRING "HSTX D2+ PIN")
 option(OVERCLOCK "Overclock to 264MHz (known incompatible with psram)" OFF)
 
 # Options for analog VGA output
-option(USE_VGA_RES "Video uses VGA (640x480) resolution" OFF)
 set(VIDEO_PIN 18 CACHE STRING "VGA Video GPIO base pin (followed by VS, CLK, HS)")
 
 option(USE_PSRAM "Locate main Mac ram in PSRAM (only for rp2350 / pico 2)" OFF)
@@ -78,7 +77,6 @@ set(MEMSIZE 128 CACHE STRING "Memory size, in KB")
 set(DISC_IMAGE ${CMAKE_CURRENT_SOURCE_DIR}/umac0ro.img CACHE FILEPATH "Built-in disk image")
 
 if (USE_HSTX)
-   add_compile_definitions(USE_VGA_RES=1)
    add_compile_definitions(HSTX_CKP=${HSTX_CKP} HSTX_D0P=${HSTX_D0P} HSTX_D1P=${HSTX_D1P} HSTX_D2P=${HSTX_D2P})
    set(VIDEO_SRC src/video_hstx.c src/gtf.c)
 else()
@@ -93,18 +91,13 @@ else()
   set(OPT_OC "")
 endif()
 
-if (USE_VGA_RES)
- add_compile_definitions(USE_VGA_RES=1)
- add_compile_definitions(DISP_WIDTH=640)
- add_compile_definitions(DISP_HEIGHT=480)
- set(RES "640x480")
- set(RESFLAG "-v")
-else()
- add_compile_definitions(DISP_WIDTH=512)
- add_compile_definitions(DISP_HEIGHT=342)
- set(RES "512x342")
- set(RESFLAG "")
-endif()
+set(MIRROR_FRAMEBUFFER 0 CACHE STRING "Whether to use a framebuffer mirror")
+set(DISP_WIDTH 512 CACHE STRING "Display width, in pixels")
+set(DISP_WIDTH 342 CACHE STRING "Display width, in pixels")
+add_compile_definitions(MIRROR_FRAMEBUFFER=${MIRROR_FRAMEBUFFER})
+add_compile_definitions(DISP_WIDTH=${DISP_WIDTH})
+add_compile_definitions(DISP_HEIGHT=${DISP_HEIGHT})
+set(RES "${DISP_WIDTH}x${DISP_HEIGHT}")
 
 if (USE_PSRAM)
   add_compile_definitions(PIN_PSRAM_CS=${PSRAM_CS} USE_PSRAM=1)
@@ -203,7 +196,7 @@ if (TARGET tinyusb_device)
   # The umac sources need to prepare Musashi (some sources are generated):
   add_custom_command(OUTPUT incbin/umac-rom.h
     COMMAND echo "*** Patching ROM ***"
-    COMMAND set -xe && mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/incbin && make -C ${UMAC_PATH} patcher && ${UMAC_PATH}/patcher ${RESFLAG} -m ${MEMSIZE} -r "${CMAKE_CURRENT_LIST_DIR}/rom.bin" -w ${CMAKE_CURRENT_BINARY_DIR}/incbin/umac-rom.h
+    COMMAND set -xe && mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/incbin && make -C ${UMAC_PATH} DEBUG=1 patcher && ${UMAC_PATH}/patcher -w ${DISP_WIDTH} -h ${DISP_HEIGHT} -m ${MEMSIZE} -r "${CMAKE_CURRENT_LIST_DIR}/rom.bin" -o ${CMAKE_CURRENT_BINARY_DIR}/incbin/umac-rom.h
     )
   add_custom_target(prepare_rom
     DEPENDS incbin/umac-rom.h
