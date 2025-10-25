@@ -80,7 +80,7 @@ set(DISC_IMAGE ${CMAKE_CURRENT_SOURCE_DIR}/umac0ro.img CACHE FILEPATH "Built-in 
 if (USE_HSTX)
    add_compile_definitions(USE_VGA_RES=1)
    add_compile_definitions(HSTX_CKP=${HSTX_CKP} HSTX_D0P=${HSTX_D0P} HSTX_D1P=${HSTX_D1P} HSTX_D2P=${HSTX_D2P})
-   set(VIDEO_SRC src/video_hstx.c)
+   set(VIDEO_SRC src/video_hstx.c src/gtf.c)
 else()
   add_compile_definitions(GPIO_VID_BASE=${VIDEO_PIN})
   set(VIDEO_SRC src/video_vga.c)

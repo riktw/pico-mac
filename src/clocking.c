@@ -1,6 +1,8 @@
 #include "clocking.h"
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <limits.h>
 #include "pico.h"
 #include "pico/stdio.h"
 #include "hardware/clocks.h"
@@ -113,7 +115,7 @@ static void __no_inline_not_in_flash_func(clock_init)(int sys_clk_div) {
     clock_stop(clk_hstx);
 
     // Set USB PLL to 528MHz
-    pll_init(pll_usb, PLL_COMMON_REFDIV, 1584 * MHZ, 3, 1);
+    pll_init(pll_usb, PLL_USB_REFDIV, 1584 * MHZ, 3, 1);
 
     const uint32_t usb_pll_freq = 528 * MHZ;
 
@@ -149,32 +151,63 @@ static void __no_inline_not_in_flash_func(clock_init)(int sys_clk_div) {
     restore_interrupts(intr_stash);
 }
 
-void overclock(enum clk_sys_speed clk_sys_div, uint32_t bit_clk_khz) {
+void overclock(enum clk_sys_speed clk_sys_div) {
     clock_init(clk_sys_div);
-	stdio_init_all();
+    stdio_init_all();
     set_psram_timing();
 #define SHOW_CLK(i) printf("clk_get_hz(%s) -> %u\n", #i, clock_get_hz(i));
-        SHOW_CLK(clk_ref);
-        SHOW_CLK(clk_sys);
-        SHOW_CLK(clk_peri);
-        SHOW_CLK(clk_hstx);
-        SHOW_CLK(clk_usb);
-        SHOW_CLK(clk_adc);
+    uint f_pll_usb = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_USB_CLKSRC_PRIMARY);
+    printf("f_pll_usb = %d\n", f_pll_usb);
+    SHOW_CLK(clk_ref);
+    SHOW_CLK(clk_sys);
+    SHOW_CLK(clk_peri);
+    SHOW_CLK(clk_hstx);
+    SHOW_CLK(clk_usb);
+    SHOW_CLK(clk_adc);
+}
 
-
-    const uint32_t dvi_clock_khz = bit_clk_khz >> 1;
-printf("bit_clk_khz = %u dvi_clock_khz = %u\n", bit_clk_khz, dvi_clock_khz);
+static int best_sys_clock_hz(uint32_t freq_hz, uint *vco_out, uint *postdiv1_out, uint *postdiv2_out) {
+    uint reference_freq_hz = XOSC_HZ / PLL_SYS_REFDIV;
+    int best = INT_MAX;
+    int bestfreq = 0;
+    for (uint fbdiv = 320; fbdiv >= 16; fbdiv--) {
+        uint vco_hz = fbdiv * reference_freq_hz;
+        if (vco_hz < PICO_PLL_VCO_MIN_FREQ_HZ || vco_hz > PICO_PLL_VCO_MAX_FREQ_HZ) continue;
+        for (uint postdiv1 = 7; postdiv1 >= 1; postdiv1--) {
+            for (uint postdiv2 = postdiv1; postdiv2 >= 1; postdiv2--) {
+                uint out = vco_hz / (postdiv1 * postdiv2);
+                int diff = abs(freq_hz - out);
+                int absdiff = abs(diff);
+                if (absdiff < best && !(vco_hz % (postdiv1 * postdiv2))) {
+                    printf("out=%d diff=%d absdiff=%d\n", out, diff, absdiff);
+                    best = absdiff;
+                    bestfreq = out;
+                    *vco_out = vco_hz;
+                    *postdiv1_out = postdiv1;
+                    *postdiv2_out = postdiv2;
+                }
+            }
+        }
+    }
+    return bestfreq;
+}
+void hstx_clock_hz(uint32_t bit_clk_hz) {
+    const uint32_t dvi_clock_hz = bit_clk_hz >> 1;
+    printf("bit_clk_hz = %u dvi_clock_hz = %u\n", bit_clk_hz, dvi_clock_hz);
     uint vco_freq, post_div1, post_div2;
-    if (!check_sys_clock_khz(dvi_clock_khz, &vco_freq, &post_div1, &post_div2))
-        panic("System clock of %u kHz cannot be exactly achieved", dvi_clock_khz);
-    const uint32_t freq = vco_freq / (post_div1 * post_div2);
+    int freq = best_sys_clock_hz(dvi_clock_hz, &vco_freq, &post_div1, &post_div2);
+    printf("dvi_clk_hz=%d freq=%d vco_freq=%d/(%d*%d)\n", dvi_clock_hz, freq, vco_freq, post_div1, post_div2);
+    printf("frequency difference of %dHz\n", dvi_clock_hz - freq);
 
     // Set the sys PLL to the requested freq
-    pll_init(pll_sys, PLL_COMMON_REFDIV, vco_freq, post_div1, post_div2);
+    pll_init(pll_sys, PLL_SYS_REFDIV, vco_freq, post_div1, post_div2);
 
     // CLK HSTX = Requested freq
     clock_configure(clk_hstx,
                     0,
                     CLOCKS_CLK_HSTX_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
                     freq, freq);
+    uint f_pll_sys = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_SYS_CLKSRC_PRIMARY);
+    printf("f_pll_sys = %d\n", f_pll_sys);
+    SHOW_CLK(clk_hstx);
 }

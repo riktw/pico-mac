@@ -320,9 +320,9 @@ static void     core1_main()
          * core 0's USB activity.
          */
 #if MIRROR_FRAMEBUFFER
-        video_init((uint32_t *)(umac_framebuffer_mirror));
+        video_init((uint32_t *)(umac_framebuffer_mirror), 640, 480, 60);
 #else
-        video_init((uint32_t *)(umac_ram + umac_get_fb_offset()));
+        video_init((uint32_t *)(umac_ram + umac_get_fb_offset()), 640, 480, 60);
 #endif
 
 #if ENABLE_AUDIO
@@ -493,7 +493,9 @@ int     main()
 {
         setup_psram();
 #if OVERCLOCK
-        overclock(CLK_SYS_264MHZ, 252000);
+        overclock(CLK_SYS_264MHZ);
+#else
+        overclock(CLK_SYS_132MHZ);
 #endif
 	stdio_init_all();
 

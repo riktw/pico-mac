@@ -1,7 +1,5 @@
 /* gtf.c  Generate mode timings using the GTF Timing Standard
  *
- * gcc gtf.c -o gtf -lm -Wall
- *
  * Copyright (c) 2001, Andy Ritger  aritger@nvidia.com
  * All rights reserved.
  *
@@ -103,14 +101,12 @@
  *
  */
 
-#ifdef HAVE_XORG_CONFIG_H
-#include <xorg-config.h>
-#endif
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+
+#include "gtf.h"
 
 #define MARGIN_PERCENT    1.8   /* % of active vertical image                */
 #define CELL_GRAN         8.0   /* assumed character cell granularity        */
@@ -130,33 +126,16 @@
 
 /* struct definitions */
 
-typedef struct __mode {
-    int hr, hss, hse, hfl;
-    int vr, vss, vse, vfl;
-    float pclk, h_freq, v_freq;
-} mode;
-
-typedef struct __options {
-    int x, y;
-    int xorgmode, fbmode;
-    float v_freq;
-} options;
-
 /* prototypes */
 
 void print_value(int n, const char *name, float val);
-void print_xf86_mode(mode * m);
-void print_fb_mode(mode * m);
-mode *vert_refresh(int h_pixels, int v_lines, float freq,
-                   int interlaced, int margins);
-options *parse_command_line(int argc, char *argv[]);
 
 /*
  * print_value() - print the result of the named computation; this is
  * useful when comparing against the GTF EXCEL spreadsheet.
  */
 
-int global_verbose = 0;
+const int global_verbose = 1;
 
 void
 print_value(int n, const char *name, float val)
@@ -164,91 +143,6 @@ print_value(int n, const char *name, float val)
     if (global_verbose) {
         printf("%2d: %-27s: %15f\n", n, name, val);
     }
-}
-
-/* print_xf86_mode() - print the XServer modeline, given mode timings. */
-
-void
-print_xf86_mode(mode * m)
-{
-    printf("\n");
-    printf("  # %dx%d @ %.2f Hz (GTF) hsync: %.2f kHz; pclk: %.2f MHz\n",
-           m->hr, m->vr, m->v_freq, m->h_freq, m->pclk);
-
-    printf("  Modeline \"%dx%d_%.2f\"  %.2f"
-           "  %d %d %d %d"
-           "  %d %d %d %d"
-           "  -HSync +Vsync\n\n",
-           m->hr, m->vr, m->v_freq, m->pclk,
-           m->hr, m->hss, m->hse, m->hfl, m->vr, m->vss, m->vse, m->vfl);
-
-}
-
-/*
- * print_fb_mode() - print a mode description in fbset(8) format;
- * see the fb.modes(8) manpage.  The timing description used in
- * this is rather odd; they use "left and right margin" to refer
- * to the portion of the hblank before and after the sync pulse
- * by conceptually wrapping the portion of the blank after the pulse
- * to infront of the visible region; ie:
- *
- *
- * Timing description I'm accustomed to:
- *
- *
- *
- *     <--------1--------> <--2--> <--3--> <--4-->
- *                                _________
- *    |-------------------|_______|       |_______
- *
- *                        R       SS      SE     FL
- *
- * 1: visible image
- * 2: blank before sync (aka front porch)
- * 3: sync pulse
- * 4: blank after sync (aka back porch)
- * R: Resolution
- * SS: Sync Start
- * SE: Sync End
- * FL: Frame Length
- *
- *
- * But the fb.modes format is:
- *
- *
- *    <--4--> <--------1--------> <--2--> <--3-->
- *                                       _________
- *    _______|-------------------|_______|       |
- *
- * The fb.modes(8) manpage refers to <4> and <2> as the left and
- * right "margin" (as well as upper and lower margin in the vertical
- * direction) -- note that this has nothing to do with the term
- * "margin" used in the GTF Timing Standard.
- *
- * XXX always prints the 32 bit mode -- should I provide a command
- * line option to specify the bpp?  It's simple enough for a user
- * to edit the mode description after it's generated.
- */
-
-void
-print_fb_mode(mode * m)
-{
-    printf("\n");
-    printf("mode \"%dx%d %.2fHz 32bit (GTF)\"\n", m->hr, m->vr, m->v_freq);
-    printf("    # PCLK: %.2f MHz, H: %.2f kHz, V: %.2f Hz\n",
-           m->pclk, m->h_freq, m->v_freq);
-    printf("    geometry %d %d %d %d 32\n", m->hr, m->vr, m->hr, m->vr);
-    printf("    timings %d %d %d %d %d %d %d\n", (int)lrint(1000000.0 / m->pclk),       /* pixclock in picoseconds */
-           m->hfl - m->hse,     /* left margin (in pixels) */
-           m->hss - m->hr,      /* right margin (in pixels) */
-           m->vfl - m->vse,     /* upper margin (in pixel lines) */
-           m->vss - m->vr,      /* lower margin (in pixel lines) */
-           m->hse - m->hss,     /* horizontal sync length (pixels) */
-           m->vse - m->vss);    /* vert sync length (pixel lines) */
-    printf("    hsync low\n");
-    printf("    vsync high\n");
-    printf("endmode\n\n");
-
 }
 
 /*
@@ -264,8 +158,8 @@ print_fb_mode(mode * m)
  * XServer of fbset mode descriptions, from what I can tell).
  */
 
-mode *
-vert_refresh(int h_pixels, int v_lines, float freq, int interlaced, int margins)
+gtf_mode_t *
+gtf_calculate(gtf_mode_t *m, int h_pixels, int v_lines, float freq)
 {
     float h_pixels_rnd;
     float v_lines_rnd;
@@ -294,7 +188,8 @@ vert_refresh(int h_pixels, int v_lines, float freq, int interlaced, int margins)
     float h_front_porch;
     float v_odd_front_porch_lines;
 
-    mode *m = (mode *) malloc(sizeof(mode));
+    const int interlaced = 0;
+    const int margins = 0;
 
     /*  1. In order to give correct results, the number of horizontal
      *  pixels requested is first processed to ensure that it is divisible
@@ -317,8 +212,7 @@ vert_refresh(int h_pixels, int v_lines, float freq, int interlaced, int margins)
      *                                     ROUND([V LINES],0))
      */
 
-    v_lines_rnd = interlaced ?
-        rint((float) v_lines) / 2.0 : rint((float) v_lines);
+    v_lines_rnd = interlaced ? rint((float) v_lines) / 2.0 : rint((float) v_lines);
 
     print_value(2, "[V LINES RND]", v_lines_rnd);
 
@@ -589,111 +483,5 @@ vert_refresh(int h_pixels, int v_lines, float freq, int interlaced, int margins)
     m->v_freq = freq;
 
     return m;
-
-}
-
-/*
- * parse_command_line() - parse the command line and return an
- * alloced structure containing the results.  On error print usage
- * and return NULL.
- */
-
-options *
-parse_command_line(int argc, char *argv[])
-{
-    int n;
-
-    options *o = (options *) calloc(1, sizeof(options));
-
-    if (argc < 4)
-        goto bad_option;
-
-    o->x = atoi(argv[1]);
-    o->y = atoi(argv[2]);
-    o->v_freq = atof(argv[3]);
-
-    /* XXX should check for errors in the above */
-
-    n = 4;
-
-    while (n < argc) {
-        if ((strcmp(argv[n], "-v") == 0) || (strcmp(argv[n], "--verbose") == 0)) {
-            global_verbose = 1;
-        }
-        else if ((strcmp(argv[n], "-f") == 0) ||
-                 (strcmp(argv[n], "--fbmode") == 0)) {
-            o->fbmode = 1;
-        }
-        else if ((strcmp(argv[n], "-x") == 0) ||
-                 (strcmp(argv[n], "--xorgmode") == 0) ||
-                 (strcmp(argv[n], "--xf86mode") == 0)) {
-            o->xorgmode = 1;
-        }
-        else {
-            goto bad_option;
-        }
-
-        n++;
-    }
-
-    /* if neither xorgmode nor fbmode were requested, default to
-       xorgmode */
-
-    if (!o->fbmode && !o->xorgmode)
-        o->xorgmode = 1;
-
-    return o;
-
- bad_option:
-
-    fprintf(stderr, "\n");
-    fprintf(stderr, "usage: %s x y refresh [-v|--verbose] "
-            "[-f|--fbmode] [-x|--xorgmode]\n", argv[0]);
-
-    fprintf(stderr, "\n");
-
-    fprintf(stderr, "            x : the desired horizontal "
-            "resolution (required)\n");
-    fprintf(stderr, "            y : the desired vertical "
-            "resolution (required)\n");
-    fprintf(stderr, "      refresh : the desired refresh " "rate (required)\n");
-    fprintf(stderr, " -v|--verbose : enable verbose printouts "
-            "(traces each step of the computation)\n");
-    fprintf(stderr, "  -f|--fbmode : output an fbset(8)-style mode "
-            "description\n");
-    fprintf(stderr, " -x|--xorgmode : output an " __XSERVERNAME__ "-style mode "
-            "description (this is the default\n"
-            "                if no mode description is requested)\n");
-
-    fprintf(stderr, "\n");
-
-    free(o);
-    return NULL;
-
-}
-
-int
-main(int argc, char *argv[])
-{
-    mode *m;
-    options *o;
-
-    o = parse_command_line(argc, argv);
-    if (!o)
-        exit(1);
-
-    m = vert_refresh(o->x, o->y, o->v_freq, 0, 0);
-    if (!m)
-        exit(1);
-
-    if (o->xorgmode)
-        print_xf86_mode(m);
-
-    if (o->fbmode)
-        print_fb_mode(m);
-
-    free(m);
-
-    return 0;
 
 }

@@ -22,7 +22,9 @@
  * THE SOFTWARE.
  */
 
-#include "stdlib.h"
+#include <math.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 // This is from: https://github.com/raspberrypi/pico-examples-rp2350/blob/a1/hstx/dvi_out_hstx_encoder/dvi_out_hstx_encoder.c
 
@@ -31,6 +33,10 @@
 #include "hardware/structs/bus_ctrl.h"
 #include "hardware/structs/hstx_ctrl.h"
 #include "hardware/structs/hstx_fifo.h"
+
+#include "clocking.h"
+#include "gtf.h"
+#include "video.h"
 
 // ----------------------------------------------------------------------------
 // DVI constants
@@ -44,27 +50,6 @@
 #define SYNC_V0_H1 (TMDS_CTRL_01 | (TMDS_CTRL_00 << 10) | (TMDS_CTRL_00 << 20))
 #define SYNC_V1_H0 (TMDS_CTRL_10 | (TMDS_CTRL_00 << 10) | (TMDS_CTRL_00 << 20))
 #define SYNC_V1_H1 (TMDS_CTRL_11 | (TMDS_CTRL_00 << 10) | (TMDS_CTRL_00 << 20))
-
-#define MODE_H_SYNC_POLARITY 0
-#define MODE_H_FRONT_PORCH   16
-#define MODE_H_SYNC_WIDTH    96
-#define MODE_H_BACK_PORCH    48
-#define MODE_H_ACTIVE_PIXELS 640
-
-#define MODE_V_SYNC_POLARITY 0
-#define MODE_V_FRONT_PORCH   10
-#define MODE_V_SYNC_WIDTH    2
-#define MODE_V_BACK_PORCH    33
-#define MODE_V_ACTIVE_LINES  480
-
-#define MODE_H_TOTAL_PIXELS ( \
-    MODE_H_FRONT_PORCH + MODE_H_SYNC_WIDTH + \
-    MODE_H_BACK_PORCH + MODE_H_ACTIVE_PIXELS \
-    )
-#define MODE_V_TOTAL_LINES  ( \
-    MODE_V_FRONT_PORCH + MODE_V_SYNC_WIDTH + \
-    MODE_V_BACK_PORCH + MODE_V_ACTIVE_LINES \
-    )
 
 #define HSTX_CMD_RAW         (0x0u << 12)
 #define HSTX_CMD_RAW_REPEAT  (0x1u << 12)
@@ -87,34 +72,35 @@
 // ----------------------------------------------------------------------------
 // HSTX command lists
 
+// These need to be in SRAM (for DMA) but also because we change them at runtime
 static uint32_t vblank_line_vsync_off[] = {
-    BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT | MODE_H_FRONT_PORCH),
+    BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT /* | MODE_H_FRONT_PORCH) */),
     BSWAP_MAYBE(SYNC_V1_H1),
-    BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT | MODE_H_SYNC_WIDTH),
+    BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT /* | MODE_H_SYNC_WIDTH) */),
     BSWAP_MAYBE(SYNC_V1_H0),
-    BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT | (MODE_H_BACK_PORCH + MODE_H_ACTIVE_PIXELS)),
+    BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT /* | (MODE_H_BACK_PORCH + MODE_H_ACTIVE_PIXELS)) */),
     BSWAP_MAYBE(SYNC_V1_H1),
 };
 
 static uint32_t vblank_line_vsync_on[] = {
-    BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT | MODE_H_FRONT_PORCH),
+    BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT /* | MODE_H_FRONT_PORCH) */),
     BSWAP_MAYBE(SYNC_V0_H1),
-    BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT | MODE_H_SYNC_WIDTH),
+    BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT /* | MODE_H_SYNC_WIDTH) */),
     BSWAP_MAYBE(SYNC_V0_H0),
-    BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT | (MODE_H_BACK_PORCH + MODE_H_ACTIVE_PIXELS)),
+    BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT /* | (MODE_H_BACK_PORCH + MODE_H_ACTIVE_PIXELS)) */),
     BSWAP_MAYBE(SYNC_V0_H1),
 };
 
 static uint32_t vactive_line[] = {
-    BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT | MODE_H_FRONT_PORCH),
+    BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT /* | MODE_H_FRONT_PORCH) */),
     BSWAP_MAYBE(SYNC_V1_H1),
     BSWAP_MAYBE(HSTX_CMD_NOP),
-    BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT | MODE_H_SYNC_WIDTH),
+    BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT /* | MODE_H_SYNC_WIDTH) */),
     BSWAP_MAYBE(SYNC_V1_H0),
     BSWAP_MAYBE(HSTX_CMD_NOP),
-    BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT | MODE_H_BACK_PORCH),
+    BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT /* | MODE_H_BACK_PORCH) */),
     BSWAP_MAYBE(SYNC_V1_H1),
-    BSWAP_MAYBE(HSTX_CMD_TMDS | MODE_H_ACTIVE_PIXELS),
+    BSWAP_MAYBE(HSTX_CMD_TMDS /* | MODE_H_ACTIVE_PIXELS) */),
 };
 
 typedef struct {
@@ -141,18 +127,48 @@ static void __not_in_flash_func(dma_irq_handler)(void) {
     ch->al3_read_addr_trig = (uintptr_t)active_picodvi->dma_commands;
 }
 
-#define REAL_DISP_WIDTH 640
-#define REAL_DISP_HEIGHT 480
-
-void    video_init(uint32_t *framebuffer) {
+__attribute__((optimize("O0")))
+void    video_init(uint32_t *framebuffer, int width, int height, float refresh) {
     picodvi_framebuffer_obj_t *self = &picodvi;
+
+    gtf_mode_t mode;
+    gtf_calculate(&mode, width, height, refresh);
+
+    hstx_clock_hz(rint(mode.pclk * 1000 * 1000 /* Hz to Hz */ * 10 /* pixel to bits */ ));
+
+    int v_total_lines = mode.vfl;
+    int v_active_lines = mode.vr;
+    int v_front_porch = mode.vss - mode.vr;
+    int v_back_porch = mode.vfl - mode.vse;
+    int v_sync_width = mode.vse - mode.vss;
+
+printf("v % 4d % 4d % 4d % 4d [% 4d]\n", v_active_lines, v_front_porch, v_sync_width, v_back_porch, v_total_lines);
+    int h_total_pixels = mode.hfl;
+    int h_active_pixels = mode.hr;
+    int h_front_porch = mode.hss - mode.hr;
+    int h_back_porch = mode.hfl - mode.hse;
+    int h_sync_width = mode.hse - mode.hss;
+printf("h % 4d % 4d % 4d % 4d [% 4d]\n", h_active_pixels, h_front_porch, h_sync_width, h_back_porch, h_total_pixels);
+
+    vblank_line_vsync_off[0] = BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT | h_front_porch);
+    vblank_line_vsync_off[2] = BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT | h_sync_width);
+    vblank_line_vsync_off[4] = BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT | h_back_porch + h_active_pixels);
+
+    vblank_line_vsync_on[0] = BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT | h_front_porch);
+    vblank_line_vsync_on[2] = BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT | h_sync_width);
+    vblank_line_vsync_on[4] = BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT | h_back_porch + h_active_pixels);
+
+    vactive_line[0] = BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT | h_front_porch);
+    vactive_line[3] = BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT | h_sync_width);
+    vactive_line[6] = BSWAP_MAYBE(HSTX_CMD_RAW_REPEAT | h_back_porch);
+    vactive_line[8] = BSWAP_MAYBE(HSTX_CMD_TMDS | h_active_pixels);
 
     // We compute all DMA transfers needed for a single frame. This ensure we don't have any super
     // quick interrupts that we need to respond to. Each transfer takes two words, trans_count and
     // read_addr. Active pixel lines need two transfers due to different read addresses. When pixel
     // doubling, then we must also set transfer size.
     size_t dma_command_size = 2;
-    self->dma_commands_len = (MODE_V_FRONT_PORCH + MODE_V_SYNC_WIDTH + MODE_V_BACK_PORCH + 2 * MODE_V_ACTIVE_LINES + 1) * dma_command_size;
+    self->dma_commands_len = (v_front_porch + v_sync_width + v_back_porch + 2 * v_active_lines + 1) * dma_command_size;
     self->dma_commands = (uint32_t *)malloc(self->dma_commands_len * sizeof(uint32_t));
     if (self->dma_commands == NULL) {
         return;
@@ -162,17 +178,17 @@ void    video_init(uint32_t *framebuffer) {
     self->dma_command_channel = dma_claim_unused_channel(true);
 
     size_t pixels_per_word = 32;
-    size_t words_per_line = REAL_DISP_WIDTH / pixels_per_word;
+    size_t words_per_line = width / pixels_per_word;
     uint8_t rot = 24; // 24 + color_depth;
     size_t shift_amount = 31; // color_depth % 32;
 
     size_t command_word = 0;
-    size_t frontporch_start = MODE_V_TOTAL_LINES - MODE_V_FRONT_PORCH;
-    size_t frontporch_end = frontporch_start + MODE_V_FRONT_PORCH;
+    size_t frontporch_start = v_total_lines - v_front_porch;
+    size_t frontporch_end = frontporch_start + v_front_porch;
     size_t vsync_start = 0;
-    size_t vsync_end = vsync_start + MODE_V_SYNC_WIDTH;
+    size_t vsync_end = vsync_start + v_sync_width;
     size_t backporch_start = vsync_end;
-    size_t backporch_end = backporch_start + MODE_V_BACK_PORCH;
+    size_t backporch_end = backporch_start + v_back_porch;
     size_t active_start = backporch_end;
 
     uint32_t dma_ctrl = (self->dma_command_channel << DMA_CH0_CTRL_TRIG_CHAIN_TO_LSB) |
@@ -193,7 +209,7 @@ void    video_init(uint32_t *framebuffer) {
     dma_channel_hw_addr(self->dma_pixel_channel)->al1_ctrl = dma_pixel_ctrl;
     dma_channel_hw_addr(self->dma_pixel_channel)->al1_write_addr = dma_write_addr;
 
-    for (size_t v_scanline = 0; v_scanline < MODE_V_TOTAL_LINES; v_scanline++) {
+    for (size_t v_scanline = 0; v_scanline < v_total_lines; v_scanline++) {
         if (vsync_start <= v_scanline && v_scanline < vsync_end) {
             self->dma_commands[command_word++] = count_of(vblank_line_vsync_on);
             self->dma_commands[command_word++] = (uintptr_t)vblank_line_vsync_on;
@@ -209,7 +225,7 @@ void    video_init(uint32_t *framebuffer) {
             size_t row = v_scanline - active_start;
             size_t transfer_count = words_per_line;
             self->dma_commands[command_word++] = transfer_count;
-            uintptr_t row_start = row * (REAL_DISP_WIDTH / 8) + (uintptr_t)framebuffer;
+            uintptr_t row_start = row * (width / 8) + (uintptr_t)framebuffer;
             self->dma_commands[command_word++] = row_start;
         }
     }
