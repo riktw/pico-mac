@@ -87,13 +87,22 @@ static const uint8_t umac_rom[] = {
 
 #if USE_PSRAM
 #define umac_ram ((uint8_t*)0x11000000)
+#define umac_ram_uncached ((uint8_t*)0x15000000)
 #else
 static uint8_t umac_ram[RAM_SIZE];
+#define umac_ram_uncached (umac_ram)
 #endif
 
-#define MIRROR_FRAMEBUFFER (USE_PSRAM || DISP_WIDTH != 640)
 #if MIRROR_FRAMEBUFFER
+#if DISP_WIDTH < 640
 static uint32_t umac_framebuffer_mirror[640*480/32];
+#else
+static uint32_t umac_framebuffer_mirror[DISP_WIDTH*DISP_HEIGHT/32];
+#endif
+#else
+#if DISP_WIDTH < 640
+#error "Mirror required for DISP_WIDTH below 640 (e.g., 512x342)"
+#endif
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -122,12 +131,7 @@ static int umac_cursor_button = 0;
 #if MIRROR_FRAMEBUFFER
 static void copy_framebuffer() {
     uint32_t *src = (uint32_t*)(umac_ram + umac_get_fb_offset());
-#if DISP_WIDTH==640 && DISP_HEIGHT==480
-    uint32_t *dest = umac_framebuffer_mirror;
-    for(int i=0; i<640*480/32; i++) {
-        *dest++ = *src++;
-    }
-#elif DISP_WIDTH==512 && DISP_HEIGHT==342
+#if DISP_WIDTH==512 && DISP_HEIGHT==342
     #define DISP_XOFFSET ((640 - DISP_WIDTH) / 32 / 2)
     #define DISP_YOFFSET ((480 - DISP_HEIGHT) / 2)
     #define LONGS_PER_INPUT_ROW (DISP_WIDTH / 32)
@@ -135,11 +139,14 @@ static void copy_framebuffer() {
     for(int i=0; i<DISP_HEIGHT; i++) {
         uint32_t *dest = umac_framebuffer_mirror + (DISP_YOFFSET * LONGS_PER_OUTPUT_ROW + DISP_XOFFSET) + LONGS_PER_OUTPUT_ROW * i;
         for(int j=0; j<LONGS_PER_INPUT_ROW; j++) {
-          *dest++ = *src++ ^ 0xffffffff;
+          *dest++ = *src++;
         }
     }
 #else
-#error Unsupported display geometry for framebuffer mirroring
+    uint32_t *dest = umac_framebuffer_mirror;
+    for(int i=0; i<DISP_WIDTH*DISP_HEIGHT/32; i++) {
+        *dest++ = *src++;
+    }
 #endif
 }
 #endif
@@ -320,9 +327,17 @@ static void     core1_main()
          * core 0's USB activity.
          */
 #if MIRROR_FRAMEBUFFER
-        video_init((uint32_t *)(umac_framebuffer_mirror));
+        uint32_t *fb = (uint32_t *)(umac_framebuffer_mirror);
 #else
-        video_init((uint32_t *)(umac_ram + umac_get_fb_offset()));
+        uint32_t *fb = (uint32_t *)(umac_ram + umac_get_fb_offset());
+#endif
+
+#if DISP_WIDTH < 640
+        video_init(fb, 640, 480, 60);
+#elif DISP_WIDTH >= 1024
+        video_init(fb, DISP_WIDTH, DISP_HEIGHT, 50);
+#else
+        video_init(fb, DISP_WIDTH, DISP_HEIGHT, 60);
 #endif
 
 #if ENABLE_AUDIO
@@ -493,7 +508,9 @@ int     main()
 {
         setup_psram();
 #if OVERCLOCK
-        overclock(CLK_SYS_264MHZ, 252000);
+        overclock(CLK_SYS_264MHZ);
+#else
+        overclock(CLK_SYS_132MHZ);
 #endif
 	stdio_init_all();
 
