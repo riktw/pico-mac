@@ -40,7 +40,7 @@ while getopts "hovd:m:W:H:" o; do
         echo "Usage: $0 [-v] [-m KiB] [-d diskimage]"
         echo ""
         echo "   -v: Use framebuffer resolution 640x480 instead of 512x342"
-        echo "   -W # -h #: Use specific framebuffer resolution"
+        echo "   -W # -H #: Use specific framebuffer resolution"
         echo "   -m: Set memory size in KiB (over 400kB requires psram)"
         echo "   -d: Specify disc image to include"
         echo "   -o: Overclock to 264MHz"
@@ -64,6 +64,9 @@ if [ $PSRAM -ne 0 ] ; then
 fi
 
 MIRROR_FRAMEBUFFER=$((PSRAM || DISP_WIDTH < 640))
+if [ $MIRROR_FRAMEBUFFER -eq 0 ]; then
+    CMAKE_ARGS="$CMAKE_ARGS -DHSTX_CKP=12 -DHSTX_D0P=14 -DHSTX_D1P=16 -DHSTX_D2P=18"
+fi
 
 # Append disk name to build directory if disk image is specified
 if [ -n "$DISC_IMAGE" ] && [ -f "$DISC_IMAGE" ]; then
@@ -89,7 +92,6 @@ cmake -S . -B build_${TAG} \
     -DUART_TX=44 -DUART_RX=45 -DUART=0 \
     -DBOARD_FILE=boards/adafruit_fruit_jam.c \
     -DMIRROR_FRAMEBUFFER=${MIRROR_FRAMEBUFFER} \
-    -DHSTX_CKP=12 -DHSTX_D0P=14 -DHSTX_D1P=16 -DHSTX_D2P=18 \
     -DSD_MHZ=16 \
     -DOVERCLOCK=${OVERCLOCK} \
     -DDISP_WIDTH=${DISP_WIDTH} \

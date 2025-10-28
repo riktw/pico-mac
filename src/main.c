@@ -139,13 +139,13 @@ static void copy_framebuffer() {
     for(int i=0; i<DISP_HEIGHT; i++) {
         uint32_t *dest = umac_framebuffer_mirror + (DISP_YOFFSET * LONGS_PER_OUTPUT_ROW + DISP_XOFFSET) + LONGS_PER_OUTPUT_ROW * i;
         for(int j=0; j<LONGS_PER_INPUT_ROW; j++) {
-          *dest++ = *src++;
+          *dest++ = *src++ ^ 0xffffffff;
         }
     }
 #else
     uint32_t *dest = umac_framebuffer_mirror;
     for(int i=0; i<DISP_WIDTH*DISP_HEIGHT/32; i++) {
-        *dest++ = *src++;
+        *dest++ = *src++ ^ 0xffffffff;
     }
 #endif
 }
