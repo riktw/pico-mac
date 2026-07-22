@@ -1,3 +1,19 @@
+# == DO NOT EDIT THE FOLLOWING LINES for the Raspberry Pi Pico VS Code Extension to work ==
+if(WIN32)
+    set(USERHOME $ENV{USERPROFILE})
+else()
+    set(USERHOME $ENV{HOME})
+endif()
+set(sdkVersion 2.3.0)
+set(toolchainVersion 15_2_Rel1)
+set(picotoolVersion 2.3.0)
+set(picoVscode ${USERHOME}/.pico-sdk/cmake/pico-vscode.cmake)
+if (EXISTS ${picoVscode})
+    include(${picoVscode})
+endif()
+# ====================================================================================
+set(PICO_BOARD pico2 CACHE STRING "Board type")
+
 # CMakeLists
 #
 # MIT License
@@ -33,20 +49,19 @@ cmake_minimum_required(VERSION 3.13)
 #    cmake -DBOARD=adafruit_fruit_jam -DPICO_BOARD=pico2 -DUSE_HSTX=1 -S . -B build_hstx -DPICO_SDK_PATH=../pico-sdk -DSD_TX=35 -DSD_RX=36 -DSD_SCK=34 -DSD_CS=39
 
 set(PICO_TINYUSB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lib/tinyusb)
-set(PIOUSB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lib/Pico-PIO-USB)
 
 set(UART_TX CACHE STRING "")
 set(UART_RX CACHE STRING "")
 set(UART CACHE STRING "")
 
-option(USE_SD "Build in SD support" OFF)
-set(SD_TX 3 CACHE STRING "SD SPI TX pin")
-set(SD_RX 4 CACHE STRING "SD SPI RX pin")
-set(SD_SCK 2 CACHE STRING "SD SPI SCK pin")
-set(SD_CS 5 CACHE STRING "SD SPI CS pin")
-set(SD_MHZ 5 CACHE STRING "SD SPI speed in MHz")
+option(USE_SD "Build in SD support" ON)
+set(SD_TX 23 CACHE STRING "SD SPI TX pin")
+set(SD_RX 20 CACHE STRING "SD SPI RX pin")
+set(SD_SCK 22 CACHE STRING "SD SPI SCK pin")
+set(SD_CS 21 CACHE STRING "SD SPI CS pin")
+set(SD_MHZ 16 CACHE STRING "SD SPI speed in MHz")
 
-option(USE_HSTX "Use HSTX digital video (only for rp2350 / pico2)" OFF)
+option(USE_HSTX "Use HSTX digital video (only for rp2350 / pico2)" ON)
 
 # Options for HSTX output (defaults are for Adafruit FruitJam)
 # HSTX always uses 640x480 for now
@@ -57,32 +72,30 @@ set(HSTX_D2P 19 CACHE STRING "HSTX D2+ PIN")
 
 option(OVERCLOCK "Overclock to 264MHz (known incompatible with psram)" OFF)
 
-# Options for analog VGA output
-set(VIDEO_PIN 18 CACHE STRING "VGA Video GPIO base pin (followed by VS, CLK, HS)")
 
-option(USE_PSRAM "Locate main Mac ram in PSRAM (only for rp2350 / pico 2)" OFF)
+option(USE_PSRAM "Locate main Mac ram in PSRAM (only for rp2350 / pico 2)" ON)
 set(PSRAM_CS 47 CACHE STRING "PSRAM Chip select pin")
 
 # Pins for PIO-based USB host
-set(PIN_USB_HOST_DP 1 CACHE STRING "USB D+ PIN")
-set(PIN_USB_HOST_DM 2 CACHE STRING "USB D- PIN")
+set(PIN_USB_HOST_DP 2 CACHE STRING "USB D+ PIN")
+set(PIN_USB_HOST_DM 3 CACHE STRING "USB D- PIN")
 
-set(USE_AUDIO 1 CACHE STRING "Use audio")
+# Pins for UART
+set(UART_TX 0 CACHE STRING "UART TX PIN")
+set(UART_RX 1 CACHE STRING "UART RX PIN")
+set(UART 0 CACHE STRING "UART")
+
+set(USE_AUDIO 0 CACHE STRING "Use audio")
 set(PIN_AUDIO_PWM 41 CACHE STRING "Pin for PWM audio")
 
 # See below, -DMEMSIZE=<size in KB> will configure umac's memory size,
 # overriding defaults.
-set(MEMSIZE 128 CACHE STRING "Memory size, in KB")
+set(MEMSIZE 4096 CACHE STRING "Memory size, in KB")
 
 set(DISC_IMAGE ${CMAKE_CURRENT_SOURCE_DIR}/umac0ro.img CACHE FILEPATH "Built-in disk image")
 
-if (USE_HSTX)
-   add_compile_definitions(HSTX_CKP=${HSTX_CKP} HSTX_D0P=${HSTX_D0P} HSTX_D1P=${HSTX_D1P} HSTX_D2P=${HSTX_D2P})
-   set(VIDEO_SRC src/video_hstx.c src/gtf.c)
-else()
-  add_compile_definitions(GPIO_VID_BASE=${VIDEO_PIN})
-  set(VIDEO_SRC src/video_vga.c)
-endif()
+add_compile_definitions(HSTX_CKP=${HSTX_CKP} HSTX_D0P=${HSTX_D0P} HSTX_D1P=${HSTX_D1P} HSTX_D2P=${HSTX_D2P})
+set(VIDEO_SRC src/video_hstx.c src/gtf.c)
 
 if (OVERCLOCK)
   add_compile_definitions(OVERCLOCK=1)
@@ -91,9 +104,9 @@ else()
   set(OPT_OC "")
 endif()
 
-set(MIRROR_FRAMEBUFFER 0 CACHE STRING "Whether to use a framebuffer mirror")
+set(MIRROR_FRAMEBUFFER 1 CACHE STRING "Whether to use a framebuffer mirror")
 set(DISP_WIDTH 512 CACHE STRING "Display width, in pixels")
-set(DISP_WIDTH 342 CACHE STRING "Display width, in pixels")
+set(DISP_HEIGHT 342 CACHE STRING "Display height, in pixels")
 add_compile_definitions(MIRROR_FRAMEBUFFER=${MIRROR_FRAMEBUFFER})
 add_compile_definitions(DISP_WIDTH=${DISP_WIDTH})
 add_compile_definitions(DISP_HEIGHT=${DISP_HEIGHT})
@@ -110,6 +123,10 @@ endif()
 set(FIRMWARE "pico-mac-${PICO_BOARD}-${MEMSIZE}k-${RES}${OPT_PSRAM}${OPT_OC}")
 
 
+execute_process (
+    COMMAND bash -c "./fetch-rom-dsk.sh"
+)
+
 # initialize the SDK based on PICO_SDK_PATH
 # note: this must happen before project()
 include(pico_sdk_import.cmake)
@@ -120,8 +137,8 @@ project(${FIRMWARE})
 pico_sdk_init()
 
 # For TUSB host stuff:
-set(FAMILY rp2040)
-set(BOARD raspberry_pi_pico)
+set(FAMILY rp2350)
+set(BOARD adafruit_fruit_jam)
 
 # umac subproject (and Musashi sub-subproject)
 set(UMAC_PATH ${CMAKE_CURRENT_SOURCE_DIR}/external/umac)
@@ -183,12 +200,10 @@ if (TARGET tinyusb_device)
     src/kbd.c
     src/hid.c
     src/clocking.c
+    src/support.c
     ${EXTRA_SD_SRC}
 
     ${PICO_TINYUSB_PATH}/src/portable/raspberrypi/pio_usb/hcd_pio_usb.c
-    ${PIOUSB_PATH}/src/pio_usb.c
-    ${PIOUSB_PATH}/src/pio_usb_host.c
-    ${PIOUSB_PATH}/src/usb_crc.c
 
     ${UMAC_SOURCES}
     )
@@ -253,3 +268,4 @@ elseif(PICO_ON_DEVICE)
    message(WARNING "not building firmware because TinyUSB submodule is not initialized in the SDK")
 endif()
 
+set_property(TARGET ${FIRMWARE} APPEND_STRING PROPERTY LINK_FLAGS "-Wl,--print-memory-usage")

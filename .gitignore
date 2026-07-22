@@ -2,3 +2,4 @@
 *.bin
 os.7z
 picotool
+build/*

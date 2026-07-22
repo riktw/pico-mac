@@ -28,6 +28,6 @@
 
 #include <inttypes.h>
 
-void    video_init(uint32_t *framebuffer, int width, int height, float refresh);
+int video_init(uint32_t *framebuffer, int width, int height, float refresh);
 
 #endif

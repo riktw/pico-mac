@@ -1,5 +1,16 @@
 # Pico Micro Mac (pico-umac)
 
+I too have run roughshod across the code!
+
+This now builds and works on the Bells&Whistles board without any external electronics needed. 
+
+Configuration is purely done by changing the CmakeLists.txt, this so it can be build using the vscode pi pico plugin. USB is again done over the on board USB port, not via PIO. 
+
+PSRAM works, and when PSRAM is detected, it's used. A slight overclock is done on the RP2350 so the PSRAM can run in spec on half the CPU speed. 
+
+SD card support is the default and an image with the correct name (umac0ro.img or umac0w.img) should be on a FAT32 formatted SD card.
+
+
 v0.21-fruitjam 28 March 2025
 
 I (@jepler) have run roughshod across the code, breaking things willy-nilly and adding
