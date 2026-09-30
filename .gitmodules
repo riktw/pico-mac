@@ -12,3 +12,7 @@
 	path = external/pico-extras
 	url = https://github.com/adafruit/pico-extras.git
 	branch = i2s-audio-rp2350b-high-pins
+[submodule "lib/Pico-PIO-USB"]
+	path = lib/Pico-PIO-USB
+	url = https://github.com/sekigon-gonnoc/Pico-PIO-USB
+	branch = main

@@ -4,7 +4,7 @@
         {
             "name": "Pico Debug (Cortex-Debug)",
             "cwd": "${userHome}/.pico-sdk/openocd/0.12.0+dev/scripts",
-            "executable": "/home/rik/Downloads/pico-mac/build/pico-mac-pico2-4096k-512x342-psram.elf",
+            "executable": "${workspaceFolder}/build/pico-mac-rp2350_bellsnwhistles-4096k-512x342-psram.elf",
             "request": "launch",
             "type": "cortex-debug",
             "servertype": "openocd",
@@ -19,13 +19,13 @@
                 "interface/cmsis-dap.cfg",
                 "target/rp2350.cfg"
             ],
-            "svdFile": "${userHome}/.pico-sdk/sdk/2.3.0/src/${command:raspberry-pi-pico.getChip}/hardware_regs/${command:raspberry-pi-pico.getChipUppercase}.svd",
+            "svdFile": "${userHome}/.pico-sdk/sdk/2.3.1/src/${command:raspberry-pi-pico.getChip}/hardware_regs/${command:raspberry-pi-pico.getChipUppercase}.svd",
             "runToEntryPoint": "main",
             // Fix for no_flash binaries, where monitor reset halt doesn't do what is expected
             // Also works fine for flash binaries
             "overrideLaunchCommands": [
                 "monitor reset init",
-                "load \"\/home\/rik\/Downloads\/pico-mac\/build\/pico-mac-pico2-4096k-512x342-psram.elf\""
+                "load \"${workspaceFolder}\/build\/pico-mac-rp2350_bellsnwhistles-4096k-512x342-psram.elf\""
             ],
             "openOCDLaunchCommands": [
                 "adapter speed 5000"
@@ -45,7 +45,7 @@
                 "set debug-file-directory /debug"
             ],
             "device": "${command:raspberry-pi-pico.getChipUppercase}",
-            "svdFile": "${userHome}/.pico-sdk/sdk/2.3.0/src/${command:raspberry-pi-pico.getChip}/hardware_regs/${command:raspberry-pi-pico.getChipUppercase}.svd",
+            "svdFile": "${userHome}/.pico-sdk/sdk/2.3.1/src/${command:raspberry-pi-pico.getChip}/hardware_regs/${command:raspberry-pi-pico.getChipUppercase}.svd",
             "runToEntryPoint": "main",
             // Fix for no_flash binaries, where monitor reset halt doesn't do what is expected
             // Also works fine for flash binaries

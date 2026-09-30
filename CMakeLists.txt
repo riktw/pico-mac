@@ -4,15 +4,15 @@ if(WIN32)
 else()
     set(USERHOME $ENV{HOME})
 endif()
-set(sdkVersion 2.3.0)
+set(sdkVersion 2.3.1)
 set(toolchainVersion 15_2_Rel1)
-set(picotoolVersion 2.3.0)
+set(picotoolVersion 2.3.1)
 set(picoVscode ${USERHOME}/.pico-sdk/cmake/pico-vscode.cmake)
 if (EXISTS ${picoVscode})
     include(${picoVscode})
 endif()
 # ====================================================================================
-set(PICO_BOARD pico2 CACHE STRING "Board type")
+set(PICO_BOARD rp2350_bellsnwhistles CACHE STRING "Board type")
 
 # CMakeLists
 #
@@ -49,6 +49,7 @@ cmake_minimum_required(VERSION 3.13)
 #    cmake -DBOARD=adafruit_fruit_jam -DPICO_BOARD=pico2 -DUSE_HSTX=1 -S . -B build_hstx -DPICO_SDK_PATH=../pico-sdk -DSD_TX=35 -DSD_RX=36 -DSD_SCK=34 -DSD_CS=39
 
 set(PICO_TINYUSB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lib/tinyusb)
+set(PIOUSB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lib/Pico-PIO-USB)
 
 set(UART_TX CACHE STRING "")
 set(UART_RX CACHE STRING "")
@@ -77,8 +78,8 @@ option(USE_PSRAM "Locate main Mac ram in PSRAM (only for rp2350 / pico 2)" ON)
 set(PSRAM_CS 47 CACHE STRING "PSRAM Chip select pin")
 
 # Pins for PIO-based USB host
-set(PIN_USB_HOST_DP 2 CACHE STRING "USB D+ PIN")
-set(PIN_USB_HOST_DM 3 CACHE STRING "USB D- PIN")
+set(PIN_USB_HOST_DP 25 CACHE STRING "USB D+ PIN")
+set(PIN_USB_HOST_DM 24 CACHE STRING "USB D- PIN")
 
 # Pins for UART
 set(UART_TX 0 CACHE STRING "UART TX PIN")
@@ -204,6 +205,9 @@ if (TARGET tinyusb_device)
     ${EXTRA_SD_SRC}
 
     ${PICO_TINYUSB_PATH}/src/portable/raspberrypi/pio_usb/hcd_pio_usb.c
+    ${PIOUSB_PATH}/src/pio_usb.c
+    ${PIOUSB_PATH}/src/pio_usb_host.c
+    ${PIOUSB_PATH}/src/usb_crc.c
 
     ${UMAC_SOURCES}
     )
