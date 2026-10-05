@@ -331,150 +331,6 @@ int main()
 
 #if ENABLE_AUDIO
 
-#define I2C_ADDR 0x18
-
-void writeRegister(uint8_t reg, uint8_t value)
-{
-    char buf[2];
-    buf[0] = reg;
-    buf[1] = value;
-    int res = i2c_write_timeout_us(i2c0, I2C_ADDR, buf, sizeof(buf), /* nostop */ false, 1000);
-    if (res != 2)
-    {
-        printf("res=%d\n", res);
-        panic("i2c_write_timeout failed: res=%d\n", res);
-    }
-}
-
-uint8_t readRegister(uint8_t reg)
-{
-    char buf[1];
-    buf[0] = reg;
-    int res = i2c_write_timeout_us(i2c0, I2C_ADDR, buf, sizeof(buf), /* nostop */ true, 1000);
-    if (res != 1)
-    {
-        panic("i2c_write_timeout failed: res=%d\n", res);
-    }
-    res = i2c_read_timeout_us(i2c0, I2C_ADDR, buf, sizeof(buf), /* nostop */ false, 1000);
-    if (res != 1)
-    {
-        panic("i2c_read_timeout failed: res=%d\n", res);
-    }
-    uint8_t value = buf[0];
-    return value;
-}
-
-void modifyRegister(uint8_t reg, uint8_t mask, uint8_t value)
-{
-    uint8_t current = readRegister(reg);
-    uint8_t new_value = (current & ~mask) | (value & mask);
-    writeRegister(reg, new_value);
-}
-
-void setPage(uint8_t page)
-{
-    writeRegister(0x00, page);
-}
-
-void Wire_begin()
-{
-    i2c_init(i2c0, 100000);
-    gpio_set_function(20, GPIO_FUNC_I2C);
-    gpio_set_function(21, GPIO_FUNC_I2C);
-}
-
-static void setup_i2s_dac()
-{
-    gpio_init(22);
-    gpio_set_dir(22, true);
-    gpio_put(22, true); // allow i2s to come out of reset
-
-    Wire_begin();
-    sleep_ms(1000);
-
-    printf("initialize codec\n");
-
-    // Reset codec
-    writeRegister(0x01, 0x01);
-    sleep_ms(10);
-
-    // Interface Control
-    modifyRegister(0x1B, 0xC0, 0x00);
-    modifyRegister(0x1B, 0x30, 0x00);
-
-    // Clock MUX and PLL settings
-    modifyRegister(0x04, 0x03, 0x03);
-    modifyRegister(0x04, 0x0C, 0x04);
-
-    writeRegister(0x06, 0x20); // PLL J
-    writeRegister(0x08, 0x00); // PLL D LSB
-    writeRegister(0x07, 0x00); // PLL D MSB
-
-    modifyRegister(0x05, 0x0F, 0x02); // PLL P/R
-    modifyRegister(0x05, 0x70, 0x10);
-
-    // DAC/ADC Config
-    modifyRegister(0x0B, 0x7F, 0x08); // NDAC
-    modifyRegister(0x0B, 0x80, 0x80);
-
-    modifyRegister(0x0C, 0x7F, 0x02); // MDAC
-    modifyRegister(0x0C, 0x80, 0x80);
-
-    modifyRegister(0x12, 0x7F, 0x08); // NADC
-    modifyRegister(0x12, 0x80, 0x80);
-
-    modifyRegister(0x13, 0x7F, 0x02); // MADC
-    modifyRegister(0x13, 0x80, 0x80);
-
-    // PLL Power Up
-    modifyRegister(0x05, 0x80, 0x80);
-
-    // Headset and GPIO Config
-    setPage(1);
-    modifyRegister(0x2e, 0xFF, 0x0b);
-    setPage(0);
-    modifyRegister(0x43, 0x80, 0x80); // Headset Detect
-    modifyRegister(0x30, 0x80, 0x80); // INT1 Control
-    modifyRegister(0x33, 0x3C, 0x14); // GPIO1
-
-    // DAC Setup
-    modifyRegister(0x3F, 0xC0, 0xC0);
-
-    // DAC Routing
-    setPage(1);
-    modifyRegister(0x23, 0xC0, 0x40);
-    modifyRegister(0x23, 0x0C, 0x04);
-
-    // DAC Volume Control
-    setPage(0);
-    modifyRegister(0x40, 0x0C, 0x00);
-    writeRegister(0x41, 0x0); // Left DAC Vol, 0dB
-    writeRegister(0x42, 0x0); // Right DAC Vol, 0dB
-
-    // Headphone and Speaker Setup
-    setPage(1);
-    modifyRegister(0x1F, 0xC0, 0xC0); // HP Driver Powered
-
-    modifyRegister(0x28, 0x04, 0x04); // HP Left not muted
-    modifyRegister(0x29, 0x04, 0x04); // HP Right not muted
-
-    writeRegister(0x24, 50); // Left Analog HP, -26 dB
-    writeRegister(0x25, 50); // Right Analog HP, -26 dB
-
-    modifyRegister(0x28, 0x78, 0x00); // HP Left Gain, 0 db
-    modifyRegister(0x29, 0x78, 0x00); // HP Right Gain, 0 db
-
-    // Speaker Amp
-    modifyRegister(0x20, 0x80, 0x80); // Amp enabled (0x80) disable with (0x00)
-    modifyRegister(0x2A, 0x04, 0x04); // Not muted (0x04) mute with (0x00)
-    modifyRegister(0x2A, 0x18, 0x08); // 0 dB gain
-    writeRegister(0x26, 40);          // amp gain, -20.1 dB
-
-    // Return to page 0
-    setPage(0);
-
-    printf("Audio I2C Initialization complete!\n");
-}
 static int volscale;
 
 #define SAMPLES_PER_BUFFER (370)
@@ -514,8 +370,8 @@ static audio_format_t audio_format = {
 
 const struct audio_i2s_config config =
     {
-        .data_pin = PICO_AUDIO_I2S_DATA_PIN,
-        .clock_pin_base = PICO_AUDIO_I2S_CLOCK_PIN_BASE,
+        .data_pin = 30,
+        .clock_pin_base = 32,
         .pio_sm = 0,
         .dma_channel = 3};
 
@@ -525,7 +381,7 @@ static struct audio_buffer_format producer_format = {
 
 static void audio_setup()
 {
-    setup_i2s_dac();
+
     const struct audio_format *output_format = audio_i2s_setup(&audio_format, &config);
     assert(output_format);
     if (!output_format)
@@ -556,20 +412,6 @@ static void set_mute_state(bool new_state)
     if (mute_state == new_state)
         return;
     mute_state = new_state;
-
-    setPage(1);
-    if (mute_state)
-    {
-        modifyRegister(0x28, 0x04, 0x04); // HP Left not muted
-        modifyRegister(0x29, 0x04, 0x04); // HP Right not muted
-        modifyRegister(0x2A, 0x04, 0x04); // Speaker not muted
-    }
-    else
-    {
-        modifyRegister(0x28, 0x04, 0x0); // HP Left muted
-        modifyRegister(0x29, 0x04, 0x0); // HP Right muted
-        modifyRegister(0x2A, 0x04, 0x0); // Speaker muted
-    }
 }
 
 void umac_audio_cfg(int volume, int sndres)
