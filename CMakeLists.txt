@@ -14,6 +14,8 @@ endif()
 # ====================================================================================
 set(PICO_BOARD rp2350_bellsnwhistles CACHE STRING "Board type")
 
+set(PCBOARD 1 CACHE STRING "PCBoard used")
+
 # CMakeLists
 #
 # MIT License
@@ -86,7 +88,6 @@ set(UART_TX 0 CACHE STRING "UART TX PIN")
 set(UART_RX 1 CACHE STRING "UART RX PIN")
 set(UART 0 CACHE STRING "UART")
 
-set(USE_AUDIO 0 CACHE STRING "Use audio")
 set(PIN_AUDIO_PWM 41 CACHE STRING "Pin for PWM audio")
 
 # See below, -DMEMSIZE=<size in KB> will configure umac's memory size,
@@ -186,11 +187,11 @@ if (NOT UART_RX STREQUAL "")
   add_compile_definitions(PICO_DEFAULT_UART_RX_PIN=${UART_RX})
 endif()
 
-if (USE_AUDIO)
+if (PCBOARD)
    add_subdirectory(external/pico-extras/src/rp2_common/pico_audio_i2s)
    add_subdirectory(external/pico-extras/src/common/pico_audio)
    add_subdirectory(external/pico-extras/src/common/pico_util_buffer)
-   add_compile_definitions(ENABLE_AUDIO=1 PICO_AUDIO_I2S_PIO=1 PICO_AUDIO_I2S_DMA_IRQ=0 PICO_AUDIO_I2S_DATA_PIN=24 PICO_AUDIO_I2S_CLOCK_PIN_BASE=26 PICO_AUDIO_I2S_MONO_INPUT=1)
+   add_compile_definitions(ENABLE_AUDIO=1 ENABLE_PIO_USB=1 PICO_AUDIO_I2S_PIO=1 PICO_AUDIO_I2S_DMA_IRQ=0 PICO_AUDIO_I2S_MONO_INPUT=1)
    set(EXTRA_AUDIO_LIB pico_util_buffer pico_audio pico_audio_i2s hardware_i2c)
 endif()
 

@@ -297,7 +297,7 @@ int main()
 
     printf("Starting, init usb\n");
 
-    // PIO
+#if ENABLE_PIO_USB
     pio_usb_configuration_t pio_cfg = PIO_USB_DEFAULT_CONFIG;
     pio_cfg.tx_ch = 2;
     pio_cfg.pin_dp = 28;
@@ -310,14 +310,13 @@ int main()
     tuh_configure(BOARD_TUH_RHPORT, TUH_CFGID_RPI_PIO_USB_CONFIGURATION, &pio_cfg);
 
     tuh_init(BOARD_TUH_RHPORT);
-
-    // USB on board
-    // const tusb_rhport_init_t rh_init = {
-    //    .role = TUSB_ROLE_HOST,
-    //    .speed = TUH_OPT_HIGH_SPEED ? TUSB_SPEED_HIGH : TUSB_SPEED_FULL,
-    //};
-    // TU_ASSERT(tuh_rhport_init(BOARD_TUH_RHPORT, &rh_init));
-
+#else
+    const tusb_rhport_init_t rh_init = {
+        .role = TUSB_ROLE_HOST,
+        .speed = TUH_OPT_HIGH_SPEED ? TUSB_SPEED_HIGH : TUSB_SPEED_FULL,
+    };
+    TU_ASSERT(tuh_rhport_init(BOARD_TUH_RHPORT, &rh_init));
+#endif
     /* This happens on core 0: */
     while (true)
     {
