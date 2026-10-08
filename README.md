@@ -2,13 +2,17 @@
 
 I too have run roughshod across the code!
 
-This now builds and works on the Bells&Whistles board without any external electronics needed. 
+This now builds and works on the [Bells&Whistles](https://github.com/riktw/RP2350B_BellsNWhistles) board without any external electronics needed. 
+
+It also supports the [PCBoard](https://github.com/riktw/RP2350B_BellsNWhistles_pcboard) for audio and USB via PIO/hub.
+
+With the PCBOARD variable in CMakeLists.txt this can be disabled/enabled
 
 Configuration is purely done by changing the CmakeLists.txt, this so it can be build using the vscode pi pico plugin. USB is again done over the on board USB port, not via PIO. 
 
 PSRAM works, and when PSRAM is detected, it's used. A slight overclock is done on the RP2350 so the PSRAM can run in spec on half the CPU speed. 
 
-SD card support is the default and an image with the correct name (umac0ro.img or umac0w.img) should be on a FAT32 formatted SD card.
+SD card support is the default and an image with the correct name (umac0ro.img or umac0.img) should be on a FAT32 formatted SD card. An example image is included in the image folder
 
 
 v0.21-fruitjam 28 March 2025
